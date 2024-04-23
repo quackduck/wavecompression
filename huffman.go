@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/gob"
 	"fmt"
+	"math"
 	"math/big"
 	"sort"
 	"strings"
@@ -65,8 +66,8 @@ func getHuffmanTree(probabilities map[int]int) *node {
 		}
 	}
 	//treePrint(nodes[0], 0)
-	dict := getDictionary(nodes[0])
-	dictPrint(dict)
+	//dict := getDictionary(nodes[0])
+	//dictPrint(dict)
 	return nodes[0]
 }
 
@@ -137,21 +138,33 @@ func toCode(data []int, dict map[int]code) ([]byte, uint) {
 }
 
 func huffman(data []int) []byte {
+	//fmt.Println(maximumAbs(data))
+
 	probabilities := getProbabilities(data)
 	root := getHuffmanTree(probabilities)
+	//assertTreeIsFull(root)
 	dict := getDictionary(root)
-	tree := encodeHuffmanTree2(root)
+
+	chunkLen := uint8(math.Ceil(math.Log2(float64(maximumAbs(data) + 1))))
+	//chunkLen := uint8(16)
+	//fmt.Println("chunklen", chunkLen, "max", maximumAbs(data))
+	tree := encodeHuffmanTree2(root, chunkLen)
+	//tree := encodeHuffmanTree(root)
+	//dictPrint(getDictionary(root))
 	code, totallen := toCode(data, dict)
 
-	result := addVarints([]byte{}, uint64(totallen)) // optimize length later
+	result := addVarints([]byte{}, uint64(totallen), uint64(chunkLen)) // optimize length later
 	result = append(result, tree...)
 	result = append(result, code...)
 	return result
 }
 
 func unHuffman(data []byte) []int {
-	totallen, tree := get1Varint(data)
-	root, data := decodeHuffmanTree2(tree)
+	totallen, chunklen, tree := get2Varints(data)
+	fmt.Println("chunklen", chunklen)
+	root, data := decodeHuffmanTree2(tree, uint8(chunklen))
+	//root, data := decodeHuffmanTree(tree)
+	//dictPrint(getDictionary(root))
 	code := fromCode(data, totallen, root)
 	return code
 }
@@ -168,21 +181,21 @@ func encodeHuffmanTree(root *node) []byte {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println("encoded huffman tree", len(result.Bytes()))
+	fmt.Println("encoded huffman tree len", len(result.Bytes()))
 	return result.Bytes()
 }
 
-func encodeHuffmanTree2(root *node) []byte {
+func encodeHuffmanTree2(root *node, chunklen uint8) []byte {
 	//treePrint(root, 0)
 	type serializedNode struct {
-		Symbol   uint8
+		Symbol   uint64
 		Internal bool
 	}
 	preordered := make([]serializedNode, 0)
 	var traverse func(n *node)
 	traverse = func(n *node) {
 		if n.Symbol != -1 {
-			preordered = append(preordered, serializedNode{Symbol: uint8(n.Symbol), Internal: false})
+			preordered = append(preordered, serializedNode{Symbol: uint64(n.Symbol), Internal: false})
 			return
 		}
 		preordered = append(preordered, serializedNode{Symbol: 0, Internal: true})
@@ -196,7 +209,7 @@ func encodeHuffmanTree2(root *node) []byte {
 	//}
 
 	bitset := new(big.Int)
-	totallen := uint(len(preordered)) // at least 1 bit per node
+	totallen := uint64(len(preordered)) // at least 1 bit per node
 	for _, n := range preordered {
 		bitset.Lsh(bitset, 1)
 		if n.Internal {
@@ -205,28 +218,28 @@ func encodeHuffmanTree2(root *node) []byte {
 			bitset.Or(bitset, big.NewInt(0))
 
 			// add symbol
-			bitset.Lsh(bitset, 8)
+			bitset.Lsh(bitset, uint(chunklen))
 			bitset.Or(bitset, big.NewInt(int64(n.Symbol)))
-			totallen += 8
+			totallen += uint64(chunklen)
 		}
 	}
 	bytelen := (totallen + 7) / 8 // round up
 	b := bitset.FillBytes(make([]byte, int(bytelen)))
 
-	result := addVarints([]byte{}, uint64(totallen))
+	result := addVarints([]byte{}, totallen)
 	result = append(result, b...)
 	fmt.Println("encoded huffman tree", len(result))
 	return result
 }
 
-func decodeHuffmanTree2(data []byte) (*node, []byte) {
+func decodeHuffmanTree2(data []byte, chunkLen uint8) (*node, []byte) {
 	totallen, n := binary.Uvarint(data)
 	bitset := new(big.Int)
 	bytelen := (totallen + 7) / 8 // round up
 	bitset.SetBytes(data[n : n+int(bytelen)])
 
 	type serializedNode struct {
-		Symbol   uint8
+		Symbol   uint64
 		Internal bool
 	}
 	preordered := make([]serializedNode, 0)
@@ -235,11 +248,11 @@ func decodeHuffmanTree2(data []byte) (*node, []byte) {
 			// internal
 			preordered = append(preordered, serializedNode{Symbol: 0, Internal: true})
 		} else {
-			currSymbol := uint8(0)
-			for j := 0; j < 8; j++ {
+			currSymbol := uint64(0)
+			for j := uint8(0); j < chunkLen; j++ {
 				i--
 				currSymbol <<= 1
-				currSymbol |= uint8(bitset.Bit(i))
+				currSymbol |= uint64(bitset.Bit(i))
 			}
 			preordered = append(preordered, serializedNode{Symbol: currSymbol, Internal: false})
 		}
@@ -268,11 +281,29 @@ func decodeHuffmanTree2(data []byte) (*node, []byte) {
 	}
 	root = traverse(preordered)
 
-	treePrint(root, 0)
+	//treePrint(root, 0)
 	return root, data[n+int(bytelen):]
 }
 
-func fromCode(data []byte, totallen uint, root *node) []int {
+func assertTreeIsFull(n *node) {
+	if n == nil {
+		return
+	}
+	if n.Left == nil {
+		if n.Right != nil {
+			panic("tree is not full")
+		}
+	}
+	if n.Right == nil {
+		if n.Left != nil {
+			panic("tree is not full")
+		}
+	}
+	assertTreeIsFull(n.Left)
+	assertTreeIsFull(n.Right)
+}
+
+func fromCode(data []byte, totallen uint64, root *node) []int {
 	var bitset *big.Int
 	bitset = new(big.Int)
 	bitset.SetBytes(data)

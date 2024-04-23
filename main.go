@@ -16,15 +16,59 @@ import (
 var (
 	mapFrom = make(map[int]int, 1024)
 	mapTo   = make(map[int]int, 1024)
+
+	//doZip = true // easily toggle-able because zip makes it worse sometimes
 )
+
+//func main() {
+//	readFromSet()
+//
+//	encode := false
+//
+//	operate(os.Args[1], os.Args[2], encode)
+//}
 
 func main() {
 	readFromSet()
-	out := encode2("3.wav")
-	//fmt.Println("encoded", len(out))
 
-	// write to file
-	f, err := os.Create("out.bin")
+	in1 := readWAV("2.wav")
+	out := encode2(in1)
+	write(out, "out.bin")
+
+	in2 := read("out.bin")
+	decoded := decode2(in2)
+	writeAsWav(decoded, "out.wav")
+}
+
+func operate(infile string, outfile string, encode bool) {
+	if encode {
+		in := readWAV(infile)
+		encoded := encode2(in)
+		write(encoded, outfile)
+	} else {
+		in := read(infile)
+		decoded := decode2(in)
+		writeAsWav(decoded, outfile)
+	}
+}
+
+func read(filename string) []byte {
+	f, err := os.Open(filename)
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+
+	buf := new(bytes.Buffer)
+	_, err = io.Copy(buf, f)
+	if err != nil {
+		panic(err)
+	}
+	return buf.Bytes()
+}
+
+func write(out []byte, filename string) {
+	f, err := os.Create(filename)
 	if err != nil {
 		panic(err)
 	}
@@ -36,17 +80,9 @@ func main() {
 	if n != len(out) {
 		panic("not enough bytes written")
 	}
-	decode2(out)
-	//decode(out)
-	//fmt.Println(mapFrom)
-
-	//readFromSet()
-	//encode2("1.wav")
-
-	//fmt.Println(out)
 }
 
-func encode2(filename string) []byte {
+func readWAV(filename string) []int {
 	f, err := os.Open(filename)
 	if err != nil {
 		panic(err)
@@ -54,24 +90,29 @@ func encode2(filename string) []byte {
 	defer f.Close()
 
 	decoder := wav.NewDecoder(f)
-	decoder.ReadInfo()
+	//decoder.ReadInfo()
+	//fmt.Println(decoder)
 
 	intBuf, err := decoder.FullPCMBuffer()
 	if err != nil {
 		panic(err)
 	}
 
-	// diff, shift to positive, then record start, then huffman encode the rest of the differences
+	return intBuf.Data
+}
 
-	data := intBuf.Data
+func encode2(data []int) []byte {
+	// diff, shift to positive, then record start, then huffman encode the rest of the differences
 	data = mapTo10Bit(data)
 	diff := differentiate(data)
+	//diff = differentiate(diff[1:])
+	//diff[0] = 0 // first sample is the same
 	shift := -minimum(diff)
 	diff = vecaddscalar(diff, shift) // make non-negative
 	start := diff[0]
 	diff = diff[1:] // remove start
 
-	//fmt.Println(shift)
+	fmt.Println("shift", shift)
 	//fmt.Println(start)
 	//fmt.Println(chunkLen, maxabs)
 	//fmt.Println(diff)
@@ -79,7 +120,7 @@ func encode2(filename string) []byte {
 	huff := huffman(diff)
 
 	//ae := acesEncode(diff, byte(chunkLen))
-	fmt.Println("huff", len(huff))
+	fmt.Println("full huff length", len(huff))
 
 	result := make([]byte, 0, len(huff)+2*binary.MaxVarintLen64)
 	result = addVarints(result, uint64(shift), uint64(start))
@@ -88,13 +129,24 @@ func encode2(filename string) []byte {
 	//fmt.Println(result)
 
 	fmt.Println("encoded pre-zip", len(result))
-	//result = zip(result)
-	//fmt.Println("encoded after-zip", len(result))
-	return result
+	new := zip(result)
+	fmt.Println("encoded after-zip", len(result))
+	if len(new) < len(result) {
+		new = append([]byte{1}, new...) // 1 means zipped
+		return new
+	} else {
+		result = append([]byte{0}, result...) // 0 means not zipped
+		return result
+	}
 }
 
 func decode2(data []byte) []int {
-	//data = unzip(data)
+	if data[0] == 1 {
+		data = data[1:]
+		data = unzip(data)
+	} else {
+		data = data[1:]
+	}
 
 	shift, start, data := get2Varints(data)
 	diff := unHuffman(data)
@@ -102,7 +154,6 @@ func decode2(data []byte) []int {
 	diff = vecaddscalar(diff, -int(shift))
 	diff = integrate(diff)
 	diff = mapTo16Bit(diff)
-	writeAsWav(diff, "out.wav")
 	return diff
 }
 
@@ -143,7 +194,7 @@ func addVarints(buf []byte, a ...uint64) []byte {
 	return buf
 }
 
-func get2Varints(buf []byte) (shift, startuint64 uint64, newbuf []byte) {
+func get2Varints(buf []byte) (one, two uint64, newbuf []byte) {
 	out := make([]uint64, 2)
 	for i := 0; i < 2; i++ {
 		num, n := binary.Uvarint(buf)
