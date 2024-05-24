@@ -20,25 +20,25 @@ var (
 	//doZip = true // easily toggle-able because zip makes it worse sometimes
 )
 
-//func main() {
-//	readFromSet()
-//
-//	encode := false
-//
-//	operate(os.Args[1], os.Args[2], encode)
-//}
-
 func main() {
 	readFromSet()
 
-	in1 := readWAV("2.wav")
-	out := encode2(in1)
-	write(out, "out.bin")
+	encode := false
 
-	in2 := read("out.bin")
-	decoded := decode2(in2)
-	writeAsWav(decoded, "out.wav")
+	operate(os.Args[1], os.Args[2], encode)
 }
+
+// func main() {
+// 	readFromSet()
+
+// 	in1 := readWAV("2.wav")
+// 	out := encode2(in1)
+// 	write(out, "out.bin")
+
+// 	in2 := read("out.bin")
+// 	decoded := decode2(in2)
+// 	writeAsWav(decoded, "out.wav")
+// }
 
 func operate(infile string, outfile string, encode bool) {
 	if encode {
