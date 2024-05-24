@@ -113,6 +113,7 @@ func encode2(data []int) []byte {
 	diff = diff[1:] // remove start
 
 	fmt.Println("shift", shift)
+	fmt.Println("diff len", len(diff))
 	//fmt.Println(start)
 	//fmt.Println(chunkLen, maxabs)
 	//fmt.Println(diff)

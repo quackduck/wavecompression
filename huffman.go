@@ -140,6 +140,8 @@ func toCode(data []int, dict map[int]code) ([]byte, uint) {
 func huffman(data []int) []byte {
 	//fmt.Println(maximumAbs(data))
 
+	printEntropy(data)
+
 	probabilities := getProbabilities(data)
 	root := getHuffmanTree(probabilities)
 	//assertTreeIsFull(root)
@@ -167,6 +169,20 @@ func unHuffman(data []byte) []int {
 	//dictPrint(getDictionary(root))
 	code := fromCode(data, totallen, root)
 	return code
+}
+
+func printEntropy(data []int) {
+	probabilities := getProbabilities(data)
+	total := 0
+	for _, count := range probabilities {
+		total += count
+	}
+	entropy := 0.0
+	for _, count := range probabilities {
+		p := float64(count) / float64(total)
+		entropy -= p * math.Log2(p)
+	}
+	fmt.Println("Entropy", entropy)
 }
 
 func get1Varint(data []byte) (uint, []byte) {
