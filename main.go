@@ -20,25 +20,59 @@ var (
 	//doZip = true // easily toggle-able because zip makes it worse sometimes
 )
 
+//func main() {
+//	readFromSet()
+//
+//	encode := false
+//
+//	operate(os.Args[1], os.Args[2], encode)
+//}
+
 func main() {
 	readFromSet()
 
-	encode := false
+	in1 := readWAV("1.wav")
+	out := encode2(in1)
+	write(out, "out.bin")
 
-	operate(os.Args[1], os.Args[2], encode)
+	in2 := read("out.bin")
+	decoded := decode2(in2)
+	writeAsWav(decoded, "out.wav")
 }
 
-// func main() {
-// 	readFromSet()
-
-// 	in1 := readWAV("2.wav")
-// 	out := encode2(in1)
-// 	write(out, "out.bin")
-
-// 	in2 := read("out.bin")
-// 	decoded := decode2(in2)
-// 	writeAsWav(decoded, "out.wav")
-// }
+//func main() {
+//
+//	readFromSet()
+//
+//	total := 0.0
+//
+//	// read every .wav inside data/ and measure its entropy
+//	files, err := os.ReadDir("data")
+//	if err != nil {
+//		panic(err)
+//	}
+//	for _, file := range files {
+//		if file.IsDir() {
+//			continue
+//		}
+//		name := file.Name()
+//		if name[len(name)-4:] == ".wav" {
+//			sz := getTheoreticalCompressedSize("data/" + name)
+//			total += sz
+//			fmt.Println(name, sz)
+//		}
+//	}
+//
+//	fmt.Println("total", total)
+//}
+//
+//func getTheoreticalCompressedSize(file string) float64 {
+//	data := readWAV(file)
+//	data = mapTo10Bit(data)
+//	diff := differentiate(data)
+//	e := getEntropy(diff)
+//	return float64(len(diff)) * e / 8.0
+//}
 
 func operate(infile string, outfile string, encode bool) {
 	if encode {
@@ -117,6 +151,13 @@ func encode2(data []int) []byte {
 	//fmt.Println(start)
 	//fmt.Println(chunkLen, maxabs)
 	//fmt.Println(diff)
+
+	//arithEncode(diff)
+
+	//fmt.Println(bwt(diff))
+
+	saveBytes(huffman(mtf(bwt(data))))
+	//fmt.Println(len(huffman(mtf(bwt(data)))))
 
 	huff := huffman(diff)
 

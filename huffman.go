@@ -172,6 +172,10 @@ func unHuffman(data []byte) []int {
 }
 
 func printEntropy(data []int) {
+	fmt.Println("Entropy", getEntropy(data))
+}
+
+func getEntropy(data []int) float64 {
 	probabilities := getProbabilities(data)
 	total := 0
 	for _, count := range probabilities {
@@ -182,7 +186,7 @@ func printEntropy(data []int) {
 		p := float64(count) / float64(total)
 		entropy -= p * math.Log2(p)
 	}
-	fmt.Println("Entropy", entropy)
+	return entropy
 }
 
 func get1Varint(data []byte) (uint, []byte) {
